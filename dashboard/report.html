@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Security Scan Report — main @ a1b2c3d4</title>
+<style>
+  /* ── Reset & Base ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:        #0b0f1a;
+    --surface:   #111827;
+    --surface2:  #1c2536;
+    --border:    #2a3448;
+    --text:      #e2e8f0;
+    --muted:     #8b9ab3;
+    --accent:    #38bdf8;
+    --pass:      #22c55e;
+    --fail:      #ef4444;
+    --warn:      #f59e0b;
+    --skip:      #6b7280;
+    --crit:      #dc2626;
+    --high:      #f97316;
+    --med:       #eab308;
+    --low:       #3b82f6;
+    --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+    --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
+    --radius:    8px;
+  }
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    line-height: 1.6;
+  }
+  /* ── Layout ── */
+  .header {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 2.5rem 2rem 2rem;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .header-inner {
+    max-width: 1200px; margin: 0 auto;
+    display: flex; align-items: flex-start; gap: 1.5rem; flex-wrap: wrap;
+  }
+  .logo { font-size: 2rem; flex-shrink: 0; }
+  .header-text h1 {
+    font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em;
+    color: var(--accent);
+  }
+  .header-meta { font-size: 0.8rem; color: var(--muted); margin-top: 0.25rem; }
+  .header-meta span { margin-right: 1.5rem; }
+  .overall-badge {
+    margin-left: auto; align-self: center;
+    font-size: 1.1rem; font-weight: 700; padding: 0.6rem 1.4rem;
+    border-radius: 50px; letter-spacing: 0.05em;
+  }
+  .overall-pass  { background: rgba(34,197,94,.15);  color: var(--pass);  border: 1px solid var(--pass);  }
+  .overall-fail  { background: rgba(239,68,68,.15);  color: var(--fail);  border: 1px solid var(--fail);  }
+  .overall-error { background: rgba(245,158,11,.15); color: var(--warn);  border: 1px solid var(--warn);  }
+  .overall-warn  { background: rgba(245,158,11,.15); color: var(--warn);  border: 1px solid var(--warn);  }
+  .main { max-width: 1200px; margin: 2rem auto; padding: 0 1.5rem 4rem; }
+  /* ── Summary Cards ── */
+  .summary-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem; margin-bottom: 2.5rem;
+  }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 1.25rem 1.5rem;
+    transition: transform .15s, box-shadow .15s;
+  }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+  .card-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
+  .card-value { font-size: 2rem; font-weight: 700; margin: 0.25rem 0; }
+  .card-sub   { font-size: 0.82rem; color: var(--muted); }
+  .card.total .card-value { color: var(--accent); }
+  .card.secrets  .card-value { color: var(--fail); }
+  .card.deps     .card-value { color: var(--fail); }
+  .card.sast     .card-value { color: var(--fail); }
+  .card.container .card-value { color: var(--fail); }
+  /* ── Sections ── */
+  .section { margin-bottom: 2rem; }
+  .section-header {
+    display: flex; align-items: center; gap: 1rem;
+    padding: 1rem 1.5rem; border-radius: var(--radius) var(--radius) 0 0;
+    border: 1px solid var(--border); border-bottom: none;
+    cursor: pointer; user-select: none;
+  }
+  .section-pass   { background: rgba(34,197,94,.07);  border-color: rgba(34,197,94,.3); }
+  .section-fail   { background: rgba(239,68,68,.07);  border-color: rgba(239,68,68,.3); }
+  .section-skip   { background: rgba(107,114,128,.07); border-color: rgba(107,114,128,.3); }
+  .section-error  { background: rgba(245,158,11,.07); border-color: rgba(245,158,11,.3); }
+  .section-title  { font-size: 1rem; font-weight: 600; flex: 1; }
+  .section-desc   { font-size: 0.82rem; color: var(--muted); }
+  .section-toggle { font-size: 1.2rem; transition: transform .2s; }
+  .section-body {
+    background: var(--surface); border: 1px solid var(--border);
+    border-top: none; border-radius: 0 0 var(--radius) var(--radius);
+    overflow: hidden;
+  }
+  /* ── Badges ── */
+  .badge { display: inline-flex; align-items: center; gap: .3rem; padding: .2rem .65rem; border-radius: 50px; font-size: .78rem; font-weight: 600; }
+  .badge-pass  { background: rgba(34,197,94,.15);  color: var(--pass);  }
+  .badge-fail  { background: rgba(239,68,68,.15);  color: var(--fail);  }
+  .badge-skip  { background: rgba(107,114,128,.15); color: var(--skip); }
+  .badge-error { background: rgba(245,158,11,.15); color: var(--warn);  }
+  /* ── Tables ── */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
+  th { background: var(--surface2); color: var(--muted); font-weight: 600;
+        text-transform: uppercase; letter-spacing: .06em; font-size: .72rem;
+        padding: .65rem 1rem; text-align: left; white-space: nowrap; }
+  td { padding: .6rem 1rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.02); }
+  .no-issues { text-align: center; color: var(--pass); padding: 2rem !important; font-weight: 600; }
+  code { font-family: var(--font-mono); font-size: .85em; background: rgba(255,255,255,.07); padding: .1em .35em; border-radius: 3px; }
+  .desc-cell { max-width: 300px; color: var(--muted); font-size: .8rem; }
+  /* ── Severity Badges ── */
+  .sev-badge { display: inline-block; padding: .15rem .55rem; border-radius: 4px; font-size: .72rem; font-weight: 700; letter-spacing: .05em; }
+  .sev-critical { background: rgba(220,38,38,.2);  color: #fca5a5; }
+  .sev-high     { background: rgba(249,115,22,.2); color: #fdba74; }
+  .sev-medium   { background: rgba(234,179,8,.2);  color: #fde047; }
+  .sev-low      { background: rgba(59,130,246,.2); color: #93c5fd; }
+  .sev-unknown  { background: rgba(107,114,128,.2); color: #d1d5db; }
+  /* ── Footer ── */
+  footer { text-align: center; padding: 2rem; font-size: .8rem; color: var(--muted); border-top: 1px solid var(--border); }
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+ 
+<!-- ═══ HEADER ════════════════════════════════════════════ -->
+<header class="header">
+  <div class="header-inner">
+    <div class="logo">🔐</div>
+    <div class="header-text">
+      <h1>Security Scan Report</h1>
+      <div class="header-meta">
+        <span>📦 Branch: <strong>main</strong></span>
+        <span>🔖 Commit: <code>a1b2c3d4</code></span>
+        <span>🏃 Run: <strong>#12345</strong></span>
+        <span>🕒 2026-04-16 07:23:22 UTC</span>
+      </div>
+    </div>
+    <div class="overall-badge overall-fail">FAILED</div>
+  </div>
+</header>
+ 
+<main class="main">
+ 
+  <!-- ═══ SUMMARY CARDS ════════════════════════════════════ -->
+  <div class="summary-grid">
+    <div class="card total">
+      <div class="card-label">Total Issues</div>
+      <div class="card-value">14</div>
+      <div class="card-sub">Across all scanners</div>
+    </div>
+    <div class="card secrets">
+      <div class="card-label">🔑 Secrets</div>
+      <div class="card-value">3</div>
+      <div class="card-sub">Gitleaks findings</div>
+    </div>
+    <div class="card deps">
+      <div class="card-label">📦 Dep. Vulns</div>
+      <div class="card-value">4</div>
+      <div class="card-sub">pip-audit findings</div>
+    </div>
+    <div class="card sast">
+      <div class="card-label">🧪 SAST Issues</div>
+      <div class="card-value">3</div>
+      <div class="card-sub">Bandit findings</div>
+    </div>
+    <div class="card container">
+      <div class="card-label">🐳 Container CVEs</div>
+      <div class="card-value">4</div>
+      <div class="card-sub">Trivy findings</div>
+    </div>
+  </div>
+ 
+  <!-- ═══ SECRET DETECTION ════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header section-fail" onclick="toggle('sec-body')">
+      <span class="section-title">🔑 Secret Detection — Gitleaks</span>
+      <span class="section-desc">3 finding(s)</span>
+      <span class="badge badge-fail">❌ FAIL</span>
+      <span class="section-toggle" id="sec-toggle">▼</span>
+    </div>
+    <div class="section-body" id="sec-body">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Rule ID</th><th>File</th><th>Line</th><th>Description</th></tr></thead>
+          <tbody><tr><td><code>aws-access-token</code></td><td>app/app.py</td><td>22</td><td>Identified a pattern that may indicate AWS credentials</td></tr>
+<tr><td><code>generic-api-key</code></td><td>app/app.py</td><td>24</td><td>Detected a Generic API Key, potentially exposing access to various services</td></tr>
+<tr><td><code>generic-password</code></td><td>app/app.py</td><td>23</td><td>Identified a password field with a non-empty value</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+ 
+  <!-- ═══ DEPENDENCY SCAN ══════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header section-fail" onclick="toggle('dep-body')">
+      <span class="section-title">📦 Dependency Vulnerabilities — pip-audit</span>
+      <span class="section-desc">4 vulnerable package(s)</span>
+      <span class="badge badge-fail">❌ FAIL</span>
+      <span class="section-toggle" id="dep-toggle">▼</span>
+    </div>
+    <div class="section-body" id="dep-body">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Package</th><th>Version</th><th>CVE / ID</th><th>Fix Version</th><th>Description</th></tr></thead>
+          <tbody><tr><td><code>Flask</code></td><td>0.12.2</td><td><code>CVE-2018-1000656</code></td><td>0.12.3</td><td class='desc-cell'>The Pallets Project Flask before 0.12.3 may generate a redirect that uses a '\r\n' sequence, allowing attackers to inject arbitrary HTTP headers.</td></tr>
+<tr><td><code>Jinja2</code></td><td>2.10</td><td><code>CVE-2019-10906</code></td><td>2.10.1</td><td class='desc-cell'>Sandbox escape via Jinja2 string formatting. Versions before 2.10.1 are vulnerable to SSTI.</td></tr>
+<tr><td><code>requests</code></td><td>2.18.4</td><td><code>CVE-2018-18074</code></td><td>2.20.0</td><td class='desc-cell'>The Requests package sends an HTTP Authorization header to an http URI upon receiving a same-hostname https-to-http redirect.</td></tr>
+<tr><td><code>PyYAML</code></td><td>3.13</td><td><code>CVE-2017-18342</code></td><td>5.1</td><td class='desc-cell'>yaml.load() in PyYAML before 5.1 allows remote code execution via a specially crafted YAML file.</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+ 
+  <!-- ═══ STATIC ANALYSIS ══════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header section-fail" onclick="toggle('sast-body')">
+      <span class="section-title">🧪 Static Analysis — Bandit (SAST)</span>
+      <span class="section-desc">3 issue(s)</span>
+      <span class="badge badge-fail">❌ FAIL</span>
+      <span class="section-toggle" id="sast-toggle">▼</span>
+    </div>
+    <div class="section-body" id="sast-body">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>Test Name</th><th>Severity</th><th>Confidence</th><th>Location</th><th>Description</th></tr></thead>
+          <tbody><tr><td><code>B608</code></td><td>hardcoded_sql_expressions</td><td><span class='sev-badge sev-high'>HIGH</span></td><td>MEDIUM</td><td>app/app.py:38</td><td class='desc-cell'>Possible SQL injection via string-based query construction. Use parameterised queries.</td></tr>
+<tr><td><code>B201</code></td><td>flask_debug_true</td><td><span class='sev-badge sev-high'>HIGH</span></td><td>HIGH</td><td>app/app.py:56</td><td class='desc-cell'>A Flask app appears to be run with debug=True, which exposes the Werkzeug debugger.</td></tr>
+<tr><td><code>B106</code></td><td>hardcoded_password_funcarg</td><td><span class='sev-badge sev-medium'>MEDIUM</span></td><td>MEDIUM</td><td>app/app.py:23</td><td class='desc-cell'>Possible hardcoded password: 'SuperSecret123!'</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+ 
+  <!-- ═══ CONTAINER SCAN ═══════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header section-fail" onclick="toggle('trivy-body')">
+      <span class="section-title">🐳 Container Security — Trivy</span>
+      <span class="section-desc">4 CVE(s) — image: secure-cicd-demo:abc1234</span>
+      <span class="badge badge-fail">❌ FAIL</span>
+      <span class="section-toggle" id="trivy-toggle">▼</span>
+    </div>
+    <div class="section-body" id="trivy-body">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>CVE ID</th><th>Package</th><th>Installed</th><th>Fixed</th><th>Severity</th><th>Title</th></tr></thead>
+          <tbody><tr><td><code>CVE-2022-1292</code></td><td><code>openssl</code></td><td>1.1.1n-0+deb11u2</td><td>1.1.1n-0+deb11u3</td><td><span class='sev-badge sev-critical'>CRITICAL</span></td><td class='desc-cell'>c_rehash script allows command injection</td></tr>
+<tr><td><code>CVE-2023-0286</code></td><td><code>openssl</code></td><td>1.1.1n-0+deb11u3</td><td>1.1.1n-0+deb11u4</td><td><span class='sev-badge sev-high'>HIGH</span></td><td class='desc-cell'>X.400 address type confusion in X.509 GeneralName</td></tr>
+<tr><td><code>CVE-2022-4450</code></td><td><code>openssl</code></td><td>1.1.1n-0+deb11u3</td><td>1.1.1n-0+deb11u4</td><td><span class='sev-badge sev-high'>HIGH</span></td><td class='desc-cell'>Double free after calling PEM_read_bio_ex</td></tr>
+<tr><td><code>CVE-2018-1000656</code></td><td><code>Flask</code></td><td>0.12.2</td><td>0.12.3</td><td><span class='sev-badge sev-high'>HIGH</span></td><td class='desc-cell'>Denial of Service via HTTP header injection in Flask redirect</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+ 
+</main>
+ 
+<footer>
+  Generated by <strong>Secure CI/CD Pipeline</strong> &middot;
+  Commit <code>a1b2c3d4</code> &middot; 2026-04-16 07:23:22 UTC
+</footer>
+ 
+<script>
+  function toggle(id) {
+    const body = document.getElementById(id);
+    const key  = id.replace('-body', '-toggle');
+    const tog  = document.getElementById(key);
+    if (!body) return;
+    const hidden = body.style.display === 'none';
+    body.style.display = hidden ? '' : 'none';
+    if (tog) tog.style.transform = hidden ? '' : 'rotate(-90deg)';
+  }
+</script>
+</body>
+</html>
+ 

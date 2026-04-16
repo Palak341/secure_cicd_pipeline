@@ -1,0 +1,87 @@
+# docker-compose.yml
+# ============================================================
+# Local Development Stack
+# ============================================================
+# Brings up the Flask app + optional tooling locally.
+# Mirrors the CI environment so "works on my machine" issues
+# are caught before pushing.
+#
+# Usage:
+#   docker compose up --build          # Start all services
+#   docker compose up app              # Start app only
+#   docker compose run --rm scanner    # Run all local scans
+#   docker compose down                # Stop and remove containers
+# ============================================================
+
+version: "3.9"
+
+services:
+
+  # ── Flask Application ─────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: secure-cicd-app
+    ports:
+      - "5000:5000"
+    environment:
+      # Load secrets from .env file (never commit .env!)
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-changeme}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD:-changeme}
+      - API_TOKEN=${API_TOKEN:-changeme}
+      - FLASK_DEBUG=${FLASK_DEBUG:-false}
+      - PORT=5000
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - cicd-net
+
+  # ── Local Security Scanner ────────────────────────────────
+  # Runs all security tools locally and writes reports to ./reports/
+  # docker compose run --rm scanner
+  scanner:
+    image: python:3.9-slim
+    container_name: secure-cicd-scanner
+    volumes:
+      - .:/workspace
+      - ./reports:/workspace/reports
+    working_dir: /workspace
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+    command: >
+      sh -c "
+        echo '=== Installing security tools ===' &&
+        pip install --quiet pip-audit bandit &&
+        mkdir -p reports &&
+        echo '=== Running pip-audit ===' &&
+        pip-audit --requirement app/requirements.txt
+          --format json
+          --output reports/dependency-report.json
+          --progress-spinner off || true &&
+        echo '=== Running Bandit SAST ===' &&
+        bandit -r app/ -f json -o reports/bandit-report.json
+          --severity-level medium || true &&
+        echo '=== Generating Dashboard ===' &&
+        python3 scripts/generate_dashboard.py
+          --reports-dir reports
+          --output dashboard/report.html
+          --commit local
+          --branch local
+          --run-id 0 &&
+        echo '=== Done. Reports written to ./reports/ ==='
+      "
+    networks:
+      - cicd-net
+    profiles:
+      - tools
+
+networks:
+  cicd-net:
+    driver: bridge
